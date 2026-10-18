@@ -1,4 +1,4 @@
-# Status Saver
+# Status Compressor
 
 A small web app that prepares photos and videos for WhatsApp Status so they keep
 their sharpness after WhatsApp's own compression.

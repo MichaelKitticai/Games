@@ -1,5 +1,5 @@
 // Cache the app shell so it opens instantly and works offline after the first visit.
-const CACHE = 'status-saver-v1';
+const CACHE = 'status-compressor-v2';
 const ASSETS = [
   './',
   'index.html',

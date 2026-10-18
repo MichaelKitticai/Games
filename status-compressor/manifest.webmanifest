@@ -1,6 +1,6 @@
 {
-  "name": "Status Saver",
-  "short_name": "Status Saver",
+  "name": "Status Compressor",
+  "short_name": "Compressor",
   "description": "Prep photos and videos so WhatsApp Status keeps them sharp.",
   "start_url": "./",
   "scope": "./",

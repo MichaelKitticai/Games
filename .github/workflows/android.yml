@@ -1,0 +1,56 @@
+name: Android APK
+
+on:
+  push:
+    paths:
+      - "status-compressor-android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: status-compressor-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk StatusCompressor.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StatusCompressor-${{ github.run_number }}
+          path: status-compressor-android/StatusCompressor.apk
+
+      # A rolling "latest" release gives a stable link you can open on your phone.
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest StatusCompressor.apk \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Status Compressor (latest build #${{ github.run_number }})" \
+            --notes "Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. On your Android phone, download StatusCompressor.apk and open it to install (allow installs from your browser when asked)."
