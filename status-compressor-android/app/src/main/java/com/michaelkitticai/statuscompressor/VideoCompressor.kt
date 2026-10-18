@@ -1,11 +1,14 @@
 package com.michaelkitticai.statuscompressor
 
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -34,7 +37,7 @@ data class VideoInfo(val width: Int, val height: Int, val durationMs: Long)
 
 data class VideoPart(val file: File, val durationMs: Long)
 
-data class VideoPlan(val width: Int, val height: Int, val bitrate: Int, val parts: Int)
+data class VideoPlan(val width: Int, val height: Int, val bitrate: Int, val parts: Int, val sharpen: Float)
 
 @OptIn(UnstableApi::class)
 class VideoCompressor(private val context: Context) {
@@ -46,12 +49,41 @@ class VideoCompressor(private val context: Context) {
             val w = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
             val h = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
             val rotation = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            // Some files (streamed or fragmented MP4s, like many stock videos) report 0 here.
             val duration = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-            if (w == null || h == null || duration == null) throw IllegalArgumentException("Couldn't read this video.")
+                ?.takeIf { it > 0 } ?: durationFromSamples(uri)
+            if (w == null || h == null) throw IllegalArgumentException("Couldn't read this video.")
             // Phones store portrait video as landscape plus a rotation flag.
             return if (rotation == 90 || rotation == 270) VideoInfo(h, w, duration) else VideoInfo(w, h, duration)
         } finally {
             r.release()
+        }
+    }
+
+    /** Time of the last video sample, or 0 if unknown (the video is then exported whole). */
+    private fun durationFromSamples(uri: Uri): Long {
+        val ex = MediaExtractor()
+        return try {
+            ex.setDataSource(context, uri, null)
+            val track = (0 until ex.trackCount).firstOrNull {
+                ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            } ?: return 0
+            val format = ex.getTrackFormat(track)
+            if (format.containsKey(MediaFormat.KEY_DURATION) && format.getLong(MediaFormat.KEY_DURATION) > 0) {
+                return format.getLong(MediaFormat.KEY_DURATION) / 1000
+            }
+            ex.selectTrack(track)
+            ex.seekTo(Long.MAX_VALUE, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            var last = 0L
+            while (ex.sampleTime >= 0) {
+                last = max(last, ex.sampleTime)
+                if (!ex.advance()) break
+            }
+            last / 1000
+        } catch (e: Exception) {
+            0
+        } finally {
+            ex.release()
         }
     }
 
@@ -72,7 +104,25 @@ class VideoCompressor(private val context: Context) {
             val sourceBitrate = originalSize * 8 / durationS
             bitrate = minOf(bitrate, max(1_000_000.0, sourceBitrate))
         }
-        return VideoPlan(w, h, bitrate.toInt(), parts)
+        return VideoPlan(w, h, bitrate.toInt(), parts, preset.videoSharpen)
+    }
+
+    /**
+     * One bilinear resize from 4K straight to 720p only samples a few of every nine pixels, which
+     * causes shimmer and jagged edges that the next encoder (ours, then WhatsApp's) wastes bits on.
+     * Halving in steps averages every pixel, like a proper downscale filter.
+     */
+    private fun downscaleSteps(info: VideoInfo, plan: VideoPlan): List<Presentation> {
+        val steps = mutableListOf<Presentation>()
+        var w = info.width
+        var h = info.height
+        while (w >= plan.width * 2 && h >= plan.height * 2) {
+            w = (w / 4) * 2
+            h = (h / 4) * 2
+            steps += Presentation.createForWidthAndHeight(w, h, Presentation.LAYOUT_SCALE_TO_FIT)
+        }
+        steps += Presentation.createForWidthAndHeight(plan.width, plan.height, Presentation.LAYOUT_SCALE_TO_FIT)
+        return steps
     }
 
     /** Exports [plan.parts] files, calling [onProgress] with 0..1 across all parts. */
@@ -89,7 +139,9 @@ class VideoCompressor(private val context: Context) {
             val start = i * partMs
             val end = if (i == plan.parts - 1) info.durationMs else (i + 1) * partMs
             val file = outFile(i)
-            export(uri, start, end, plan, file) { p -> onProgress((i + p) / plan.parts) }
+            // A single part is exported whole; clipping to a bad duration produced empty exports.
+            val clip = if (plan.parts > 1) start to end else null
+            export(uri, info, clip, plan, file) { p -> onProgress((i + p) / plan.parts) }
             outputs += VideoPart(file, end - start)
         }
         return outputs
@@ -97,8 +149,8 @@ class VideoCompressor(private val context: Context) {
 
     private suspend fun export(
         uri: Uri,
-        startMs: Long,
-        endMs: Long,
+        info: VideoInfo,
+        clip: Pair<Long, Long>?,
         plan: VideoPlan,
         out: File,
         onProgress: (Float) -> Unit,
@@ -118,6 +170,9 @@ class VideoCompressor(private val context: Context) {
                 .setVideoMimeType(MimeTypes.VIDEO_H264)
                 .setAudioMimeType(MimeTypes.AUDIO_AAC)
                 .setEncoderFactory(encoders)
+                // 4K decode plus tone mapping can stall longer than the 10 s default and fail with
+                // ERROR_CODE_MUXING_TIMEOUT on slower phones. Let it take as long as it needs.
+                .setMaxDelayBetweenMuxerSamplesMs(C.TIME_UNSET)
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                         handler.removeCallbacks(poll)
@@ -142,23 +197,22 @@ class VideoCompressor(private val context: Context) {
                 })
                 .build()
 
-            val mediaItem = MediaItem.Builder()
-                .setUri(uri)
-                .setClippingConfiguration(
-                    MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(startMs)
-                        .setEndPositionMs(endMs)
-                        .build()
-                )
-                .build()
+            val mediaItem = MediaItem.Builder().setUri(uri).apply {
+                if (clip != null) {
+                    setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(clip.first)
+                            .setEndPositionMs(clip.second)
+                            .build()
+                    )
+                }
+            }.build()
             val edited = EditedMediaItem.Builder(mediaItem)
                 .setEffects(
                     Effects(
                         listOf(),
-                        listOf(
-                            Presentation.createForWidthAndHeight(
-                                plan.width, plan.height, Presentation.LAYOUT_SCALE_TO_FIT
-                            ),
+                        downscaleSteps(info, plan) + listOfNotNull(
+                            plan.sharpen.takeIf { it > 0f }?.let { SharpenEffect(it) },
                             // 60 fps phone footage at 30 fps: apps drop frames anyway, and do it worse.
                             FrameDropEffect.createDefaultFrameDropEffect(30f),
                         ),

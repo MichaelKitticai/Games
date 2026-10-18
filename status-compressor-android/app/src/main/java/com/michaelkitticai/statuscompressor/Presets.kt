@@ -23,22 +23,27 @@ enum class Preset(
     val videoMaxBitrate: Int,
     val videoMaxBytesPerPart: Long?,
     val segmentSeconds: Int?,
+    val videoSharpen: Float,
 ) {
     WHATSAPP_HD(
         label = "WhatsApp HD",
-        description = "Sharpest Status. Tap HD in WhatsApp before posting. Long videos are split into 60 s parts.",
+        description = "Sharpest Status. Videos are made at WhatsApp's 720p HD size so it doesn't shrink them again. " +
+            "Turn on HD in WhatsApp (Settings > Storage and data > Media upload quality). Long videos are split into 60 s parts.",
         fileTag = "wa_hd",
         imageLongEdge = 2560, imageShortEdge = 2560, imageMaxBytes = 3_500_000,
-        videoShortEdge = 1080, videoLongEdge = 1920, videoMaxBitrate = 6_000_000,
-        videoMaxBytesPerPart = null, segmentSeconds = 60,
+        // WhatsApp HD Status plays at 720p. Sending 1080p or 4K just means WhatsApp does the
+        // downscale itself, quickly and badly, then re-encodes at a low bitrate.
+        videoShortEdge = 720, videoLongEdge = 1280, videoMaxBitrate = 4_000_000,
+        videoMaxBytesPerPart = null, segmentSeconds = 60, videoSharpen = 0.5f,
     ),
     WHATSAPP(
         label = "WhatsApp",
         description = "Standard quality, smaller files. Good when data is tight.",
         fileTag = "wa",
         imageLongEdge = 1600, imageShortEdge = 1600, imageMaxBytes = 1_000_000,
-        videoShortEdge = 720, videoLongEdge = 1280, videoMaxBitrate = 3_500_000,
-        videoMaxBytesPerPart = 16_000_000, segmentSeconds = 60,
+        // WhatsApp's standard (non-HD) Status is about 480p.
+        videoShortEdge = 480, videoLongEdge = 854, videoMaxBitrate = 2_000_000,
+        videoMaxBytesPerPart = 16_000_000, segmentSeconds = 60, videoSharpen = 0.4f,
     ),
     INSTAGRAM(
         label = "Instagram",
@@ -46,7 +51,7 @@ enum class Preset(
         fileTag = "ig",
         imageLongEdge = 1920, imageShortEdge = 1080, imageMaxBytes = 4_000_000,
         videoShortEdge = 1080, videoLongEdge = 1920, videoMaxBitrate = 8_000_000,
-        videoMaxBytesPerPart = null, segmentSeconds = null,
+        videoMaxBytesPerPart = null, segmentSeconds = null, videoSharpen = 0.25f,
     ),
     TIKTOK(
         label = "TikTok",
@@ -54,7 +59,7 @@ enum class Preset(
         fileTag = "tt",
         imageLongEdge = 1920, imageShortEdge = 1080, imageMaxBytes = 4_000_000,
         videoShortEdge = 1080, videoLongEdge = 1920, videoMaxBitrate = 10_000_000,
-        videoMaxBytesPerPart = null, segmentSeconds = null,
+        videoMaxBytesPerPart = null, segmentSeconds = null, videoSharpen = 0.25f,
     );
 
     fun fitImage(w: Int, h: Int) = fit(w, h, imageShortEdge, imageLongEdge, even = false)
