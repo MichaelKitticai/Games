@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Status Saver</title>
+  <meta name="description" content="Prepare photos and videos for WhatsApp Status so they stay sharp.">
+  <meta name="theme-color" content="#0b141a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <img src="icon.svg" alt="" width="36" height="36">
+    <div>
+      <h1>Status Saver</h1>
+      <p class="sub">Prep photos and videos so WhatsApp Status keeps them sharp.</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>1. Pick the quality you'll post with</h2>
+      <div class="seg" role="radiogroup" aria-label="Quality mode">
+        <label><input type="radio" name="mode" value="hd" checked><span><b>HD</b><small>Tap "HD" in WhatsApp before posting</small></span></label>
+        <label><input type="radio" name="mode" value="sd"><span><b>Standard</b><small>For when HD isn't available or data is tight</small></span></label>
+      </div>
+
+      <details class="adv">
+        <summary>Advanced</summary>
+        <label class="row">
+          <span>Split videos into parts of</span>
+          <select id="segLen">
+            <option value="15">15 s</option>
+            <option value="30">30 s</option>
+            <option value="60" selected>60 s</option>
+            <option value="90">90 s</option>
+          </select>
+        </label>
+        <label class="row">
+          <span>Photo sharpening</span>
+          <select id="sharpen">
+            <option value="0">Off</option>
+            <option value="0.25">Light</option>
+            <option value="0.45" selected>Medium</option>
+            <option value="0.7">Strong</option>
+          </select>
+        </label>
+        <label class="row">
+          <span>Video frame rate</span>
+          <select id="fps">
+            <option value="30" selected>30 fps (recommended)</option>
+            <option value="source">Keep original</option>
+          </select>
+        </label>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>2. Add photos or videos</h2>
+      <label class="drop" id="drop">
+        <input type="file" id="files" accept="image/*,video/*" multiple>
+        <span class="big">Tap to choose</span>
+        <span class="hint">or drop files here. Nothing is uploaded; everything happens on your phone.</span>
+      </label>
+    </section>
+
+    <section id="results" class="results" aria-live="polite"></section>
+
+    <section class="panel tips">
+      <h2>Getting the best result</h2>
+      <ol>
+        <li>Shoot in good light. WhatsApp's compressor struggles most with dark, grainy footage.</li>
+        <li>Process here, then use <b>Share</b> and pick WhatsApp, or <b>Save</b> and post from your gallery.</li>
+        <li>In WhatsApp, tap the <b>HD</b> button at the top of the editor before posting (if you chose HD mode).</li>
+        <li>On Android, turn on <i>Settings &rarr; Storage and data &rarr; Media upload quality &rarr; HD quality</i>.</li>
+        <li>Avoid adding stickers or text inside WhatsApp's editor; that forces an extra re-encode.</li>
+      </ol>
+    </section>
+  </main>
+
+  <template id="card-tpl">
+    <article class="card">
+      <div class="thumb"></div>
+      <div class="body">
+        <div class="name"></div>
+        <div class="meta"></div>
+        <div class="status"></div>
+        <progress max="1" value="0" hidden></progress>
+        <div class="outs"></div>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
