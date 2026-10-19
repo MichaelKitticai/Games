@@ -19,6 +19,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -42,6 +43,8 @@ class Item(
     var detail by mutableStateOf("")
     var outputs by mutableStateOf<List<Output>>(emptyList())
     var thumb by mutableStateOf<ImageBitmap?>(null)
+    /** x264 failed and the phone's encoder made this one instead. */
+    var fellBack by mutableStateOf(false)
     var skipped = false
 
     val outputSize: Long get() = outputs.sumOf { it.size }
@@ -79,9 +82,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val job = launch { process(item) }
                 currentId = item.id
                 currentJob = job
+                // Progress notification; it also stops Android freezing the app in the background.
+                val notifier = launch {
+                    while (true) {
+                        WorkService.update(context, "Compressing ${item.name}", item.progress)
+                        delay(1000)
+                    }
+                }
                 job.join()
+                notifier.cancel()
                 currentJob = null
                 currentId = -1
+                if (queue.isEmpty) WorkService.stop(context)
             }
         }
     }
@@ -198,6 +210,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     item.status = "Compressing part $part of ${plan.parts}..."
                 }
             },
+            onFallback = {
+                item.fellBack = true
+                item.status = "Sharp encoder got stuck. Using the phone's encoder..."
+            },
         )
         val outputs = parts.mapIndexed { i, part ->
             val label = if (parts.size > 1) "Part ${i + 1} · ${formatDuration(part.durationMs)}"
@@ -217,7 +233,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         stats.record(item.originalSize, item.outputSize)
         item.done = true
-        item.status = if (saveToGallery) "Done · saved to gallery" else "Done"
+        item.status = (if (saveToGallery) "Done · saved to gallery" else "Done") +
+            if (item.fellBack) " · phone encoder (less sharp)" else ""
     }
 
     private fun uniqueFile(base: String, ext: String): File {

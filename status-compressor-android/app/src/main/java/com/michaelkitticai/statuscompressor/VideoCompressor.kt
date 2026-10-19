@@ -8,6 +8,8 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -39,6 +41,9 @@ import kotlin.math.max
 data class VideoInfo(val width: Int, val height: Int, val durationMs: Long)
 
 data class VideoPart(val file: File, val durationMs: Long)
+
+/** x264 stopped making progress or failed; the export is retried with the phone's encoder. */
+class X264FailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 data class VideoPlan(
     val width: Int,
@@ -135,6 +140,11 @@ class VideoCompressor(private val context: Context) {
         return steps
     }
 
+    companion object {
+        /** No new x264 frame for this long means it's stuck. */
+        private const val STALL_MS = 30_000L
+    }
+
     /** Exports [plan.parts] files, calling [onProgress] with 0..1 across all parts. */
     suspend fun compress(
         uri: Uri,
@@ -142,7 +152,9 @@ class VideoCompressor(private val context: Context) {
         plan: VideoPlan,
         outFile: (part: Int) -> File,
         onProgress: (Float) -> Unit,
+        onFallback: () -> Unit = {},
     ): List<VideoPart> {
+        var useX264 = X264.available
         val partMs = info.durationMs / plan.parts
         val outputs = mutableListOf<VideoPart>()
         for (i in 0 until plan.parts) {
@@ -151,7 +163,16 @@ class VideoCompressor(private val context: Context) {
             val file = outFile(i)
             // A single part is exported whole; clipping to a bad duration produced empty exports.
             val clip = if (plan.parts > 1) start to end else null
-            export(uri, info, clip, plan, file) { p -> onProgress((i + p) / plan.parts) }
+            val progress = { p: Float -> onProgress((i + p) / plan.parts) }
+            try {
+                export(uri, info, clip, plan, file, useX264, progress)
+            } catch (e: X264FailedException) {
+                // Better a video from the phone's encoder than none at all.
+                Log.w(TAG, "x264 failed, retrying with the phone's encoder", e)
+                useX264 = false
+                onFallback()
+                export(uri, info, clip, plan, file, useX264 = false, progress)
+            }
             outputs += VideoPart(file, end - start)
         }
         return outputs
@@ -163,8 +184,10 @@ class VideoCompressor(private val context: Context) {
         clip: Pair<Long, Long>?,
         plan: VideoPlan,
         out: File,
+        useX264: Boolean,
         onProgress: (Float) -> Unit,
     ) = withContext(Dispatchers.Main) {
+        Log.i(TAG, "Export ${info.width}x${info.height} ${info.durationMs} ms, clip $clip -> $plan, x264 $useX264")
         // Transformer must be created, driven and cancelled on a Looper thread.
         val handler = Handler(Looper.getMainLooper())
         suspendCancellableCoroutine<Unit> { cont ->
@@ -196,7 +219,7 @@ class VideoCompressor(private val context: Context) {
                     encodedUs.accumulateAndGet(ptsUs - firstPtsUs.get()) { a, b -> max(a, b) }
                 },
             )
-            val encoders = X264EncoderFactory(x264Settings, hardware)
+            val encoders = if (useX264) X264EncoderFactory(x264Settings, hardware) else hardware
 
             lateinit var poll: Runnable
             val transformer = Transformer.Builder(context)
@@ -208,10 +231,10 @@ class VideoCompressor(private val context: Context) {
                 .setMaxDelayBetweenMuxerSamplesMs(C.TIME_UNSET)
                 // Encode portrait as portrait (720x1280), like the clips WhatsApp left untouched,
                 // instead of landscape plus a rotation flag.
-                .setPortraitEncodingEnabled(X264.available)
+                .setPortraitEncodingEnabled(useX264)
                 .apply {
                     // The GPU must wait for x264, not race ahead of it (that drops frames).
-                    if (X264.available) {
+                    if (useX264) {
                         experimentalSetMaxFramesInEncoder(
                             X264.maxFramesInEncoder(plan.width, plan.height, 30, x264Settings)
                         )
@@ -219,6 +242,7 @@ class VideoCompressor(private val context: Context) {
                 }
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                        Log.i(TAG, "Export done: ${out.length()} bytes, encoder ${exportResult.videoEncoderName}")
                         handler.removeCallbacks(poll)
                         if (cont.isActive) cont.resume(Unit)
                     }
@@ -228,13 +252,13 @@ class VideoCompressor(private val context: Context) {
                         exportResult: ExportResult,
                         exportException: ExportException,
                     ) {
+                        Log.e(TAG, "Export failed", exportException)
                         handler.removeCallbacks(poll)
                         if (cont.isActive) {
+                            val message = "Couldn't convert this video (${exportException.errorCodeName})."
                             cont.resumeWithException(
-                                IllegalStateException(
-                                    "Couldn't convert this video (${exportException.errorCodeName}).",
-                                    exportException,
-                                )
+                                if (useX264) X264FailedException(message, exportException)
+                                else IllegalStateException(message, exportException)
                             )
                         }
                     }
@@ -269,11 +293,27 @@ class VideoCompressor(private val context: Context) {
                 .build()
 
             val holder = ProgressHolder()
+            var lastEncodedUs = -1L
+            var lastActivityMs = SystemClock.elapsedRealtime()
             poll = Runnable {
                 if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {
                     onProgress(holder.progress / 100f)
                 } else if (encodedUs.get() > 0) {
                     onProgress(minOf(0.99f, encodedUs.get().toFloat() / spanUs))
+                }
+                // Watchdog: x264 should turn out frames steadily. If nothing comes for a while,
+                // something is stuck; give up on x264 and let compress() retry without it.
+                val now = SystemClock.elapsedRealtime()
+                if (encodedUs.get() != lastEncodedUs) {
+                    lastEncodedUs = encodedUs.get()
+                    lastActivityMs = now
+                }
+                if (useX264 && now - lastActivityMs > STALL_MS) {
+                    Log.w(TAG, "x264 stalled: no new frame for ${STALL_MS / 1000} s (encoded up to $lastEncodedUs us)")
+                    transformer.cancel()
+                    out.delete()
+                    if (cont.isActive) cont.resumeWithException(X264FailedException("x264 stalled"))
+                    return@Runnable
                 }
                 handler.postDelayed(poll, 250)
             }

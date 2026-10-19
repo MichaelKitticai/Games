@@ -39,7 +39,9 @@ enum class Preset(
         // the limit, video plus audio, and spend the bits with x264 instead. Matches test clip N.
         // 1.45 Mbps video + up to ~150 kbps audio (some phones ignore our 96 kbps request) = ~1.6.
         videoShortEdge = 720, videoLongEdge = 1280, videoMaxBitrate = 1_450_000,
-        videoMaxBytesPerPart = null, segmentSeconds = 60, videoSharpen = 0f, x264Preset = "slow",
+        videoMaxBytesPerPart = null, segmentSeconds = 60, videoSharpen = 0f,
+        // "slow" ran at ~3 fps on a test device; "medium" is ~1.7x faster for 0.004 SSIM.
+        x264Preset = "medium",
     ),
     WHATSAPP(
         label = "WhatsApp",
@@ -48,7 +50,7 @@ enum class Preset(
         imageLongEdge = 1600, imageShortEdge = 1600, imageMaxBytes = 1_000_000,
         // WhatsApp's standard (non-HD) Status is about 480p.
         videoShortEdge = 480, videoLongEdge = 854, videoMaxBitrate = 2_000_000,
-        videoMaxBytesPerPart = 16_000_000, segmentSeconds = 60, videoSharpen = 0.4f, x264Preset = "slow",
+        videoMaxBytesPerPart = 16_000_000, segmentSeconds = 60, videoSharpen = 0.4f, x264Preset = "medium",
     ),
     INSTAGRAM(
         label = "Instagram",

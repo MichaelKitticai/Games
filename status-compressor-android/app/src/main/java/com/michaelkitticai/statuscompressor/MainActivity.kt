@@ -1,6 +1,9 @@
 package com.michaelkitticai.statuscompressor
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -19,6 +22,12 @@ class MainActivity : ComponentActivity() {
         // Only on a fresh launch; after rotation the ViewModel already has these files.
         if (savedInstanceState == null) handleShare(intent)
         setContent { App(vm) }
+        // For the progress notification while compressing in the background.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
+        }
     }
 
     override fun onResume() {

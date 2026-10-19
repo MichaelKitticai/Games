@@ -10,6 +10,7 @@ import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import android.view.Surface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -40,6 +41,8 @@ class GlFrameReader(
     private var colorTexture = 0
     private val pixels = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder())
     private val stMatrix = FloatArray(16)
+    var framesRead = 0
+        private set
     // Upside-down quad (x, y, u, v), so glReadPixels (which starts at the bottom row) returns the top
     // row first. A field, not a local: GL reads this memory on every draw, so it must not be freed.
     private val quad = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
@@ -82,7 +85,7 @@ class GlFrameReader(
             EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
             EGL14.eglDestroySurface(display, pbuffer)
             EGL14.eglDestroyContext(display, context)
-            EGL14.eglTerminate(display)
+            // No eglTerminate: the display is shared with Media3's own GL thread in this process.
         }
         thread.quitSafely()
         thread.join(2000) // So no frame is still being converted when the encoder is freed.
@@ -169,6 +172,8 @@ class GlFrameReader(
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         pixels.clear()
         GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixels)
+        framesRead++
+        if (framesRead == 1 || framesRead % 60 == 0) Log.i(TAG, "x264 input: $framesRead frames read")
         onFrame(pixels, surfaceTexture.timestamp / 1000)
     }
 

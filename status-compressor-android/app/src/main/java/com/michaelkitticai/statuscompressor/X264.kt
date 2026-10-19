@@ -1,6 +1,7 @@
 package com.michaelkitticai.statuscompressor
 
 import android.media.MediaCodec
+import android.util.Log
 import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -87,6 +88,7 @@ class X264EncoderFactory(
         if (!X264.available || format.sampleMimeType != MimeTypes.VIDEO_H264) {
             return fallback.createForVideoEncoding(format, logSessionId)
         }
+        Log.i(TAG, "x264 encoder for ${format.width}x${format.height} @ ${format.frameRate} fps, $settings")
         return X264Codec(format, settings)
     }
 
@@ -102,6 +104,7 @@ class X264EncoderFactory(
 private class X264Codec(requested: Format, settings: X264Settings) : Codec {
 
     private val onFrameEncoded = settings.onFrameEncoded
+    private var framesEncoded = 0
 
     private class Frame(val yuv: ByteBuffer?, val ptsUs: Long) // yuv == null: end of stream
     private class Output(val data: ByteBuffer, val info: MediaCodec.BufferInfo)
@@ -151,6 +154,7 @@ private class X264Codec(requested: Format, settings: X264Settings) : Codec {
                 val yuv = frame.yuv
                 if (yuv == null) {
                     while (true) emit(X264.nativeFlush(handle, info) ?: break, info)
+                    Log.i(TAG, "x264 done: $framesEncoded frames")
                     encoderDone = true
                     return
                 }
@@ -159,6 +163,7 @@ private class X264Codec(requested: Format, settings: X264Settings) : Codec {
                 if (encoded != null) emit(encoded, info)
             }
         } catch (t: Throwable) {
+            Log.e(TAG, "x264 encoder thread failed", t)
             error = t
         }
     }
@@ -168,6 +173,8 @@ private class X264Codec(requested: Format, settings: X264Settings) : Codec {
             set(0, data.size, info[0], if (info[2] != 0L) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
         }
         outputs.add(Output(ByteBuffer.wrap(data), bufferInfo))
+        framesEncoded++
+        if (framesEncoded == 1 || framesEncoded % 60 == 0) Log.i(TAG, "x264 output: $framesEncoded frames encoded")
         onFrameEncoded?.invoke(info[0])
     }
 

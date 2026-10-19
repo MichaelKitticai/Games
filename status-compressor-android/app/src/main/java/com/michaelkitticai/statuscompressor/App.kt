@@ -1,5 +1,6 @@
 package com.michaelkitticai.statuscompressor
 
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -130,6 +131,7 @@ fun App(vm: MainViewModel) {
                     }
                     items(vm.items, key = { it.id }) { item -> ItemCard(item, onCancel = { vm.cancel(item) }) }
                 }
+                item { Footer() }
             }
         }
     }
@@ -240,6 +242,21 @@ private fun PresetCard(
     }
 }
 
+/** Version, update check and debug log, at the bottom of the screen. */
+@Composable
+private fun Footer() {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Status Compressor ${Updater.versionName(context)}", color = Muted, fontSize = 13.sp)
+        Row {
+            TextButton(onClick = { (context as? Activity)?.let { Updater.check(it, userInitiated = true) } }) {
+                Text("Check for updates")
+            }
+            TextButton(onClick = { DebugLog.share(context) }) { Text("Send debug log", color = Muted) }
+        }
+    }
+}
+
 @Composable
 private fun ItemCard(item: Item, onCancel: () -> Unit) {
     Section {
@@ -271,8 +288,18 @@ private fun ItemCard(item: Item, onCancel: () -> Unit) {
                         trackColor = Panel2,
                     )
                 }
-                if (item.busy) {
-                    TextButton(onClick = onCancel, contentPadding = PaddingValues(0.dp)) { Text("Cancel", color = Muted) }
+                Row {
+                    if (item.busy) {
+                        TextButton(onClick = onCancel, contentPadding = PaddingValues(0.dp)) { Text("Cancel", color = Muted) }
+                        Spacer(Modifier.width(16.dp))
+                    }
+                    // While testing: an easy way to send us the log when something goes wrong.
+                    if (item.kind == Kind.VIDEO && (item.busy || item.failed || item.fellBack)) {
+                        val context = LocalContext.current
+                        TextButton(onClick = { DebugLog.share(context) }, contentPadding = PaddingValues(0.dp)) {
+                            Text("Send debug log", color = Muted)
+                        }
+                    }
                 }
             }
         }

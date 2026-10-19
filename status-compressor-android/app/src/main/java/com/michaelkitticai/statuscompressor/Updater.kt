@@ -43,16 +43,24 @@ object Updater {
     /** Set while the user is in "install unknown apps" settings; picked up in [resumeIfPending]. */
     private var pendingAfterPermission: Release? = null
 
-    fun check(activity: Activity) {
-        if (dialogShowing || System.currentTimeMillis() - lastCheckMs < CHECK_INTERVAL_MS) return
+    /** [userInitiated]: from the "Check for updates" button, so always check and say what happened. */
+    fun check(activity: Activity, userInitiated: Boolean = false) {
+        if (dialogShowing) return
+        if (!userInitiated && System.currentTimeMillis() - lastCheckMs < CHECK_INTERVAL_MS) return
+        if (userInitiated) toast(activity, "Checking for updates...")
         io.execute {
             val release = try {
                 fetch()
             } catch (e: Exception) {
-                return@execute // Offline or the release is mid-publish; try again next time.
+                // Offline or the release is mid-publish; the automatic check tries again later.
+                if (userInitiated) toast(activity, "Couldn't check for updates. Check your connection.")
+                return@execute
             }
             lastCheckMs = System.currentTimeMillis()
-            if (release.versionCode <= installedVersion(activity)) return@execute
+            if (release.versionCode <= installedVersion(activity)) {
+                if (userInitiated) toast(activity, "You have the latest version (${versionName(activity)}).")
+                return@execute
+            }
             main.post {
                 if (!activity.isFinishing && !activity.isDestroyed && !dialogShowing) showDialog(activity, release)
             }
@@ -89,6 +97,9 @@ object Updater {
 
     private fun installedVersion(context: Context): Long =
         context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode
+
+    fun versionName(context: Context): String =
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
 
     private fun showDialog(activity: Activity, release: Release) {
         val message = buildString {
