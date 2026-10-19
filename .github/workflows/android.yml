@@ -40,8 +40,6 @@ jobs:
           key: x264-${{ hashFiles('status-compressor-android/scripts/build-x264.sh') }}
 
       - name: Build x264
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: scripts/build-x264.sh
 
       - name: Build APK
