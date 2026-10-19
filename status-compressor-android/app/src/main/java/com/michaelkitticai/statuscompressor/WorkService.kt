@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
 
 /**
  * Keeps the app in the foreground while it compresses, with a progress notification. Without it,
@@ -30,7 +29,8 @@ class WorkService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         }
         try {
-            ServiceCompat.startForeground(this, ID, build(this, title, progress), type)
+            // Not ServiceCompat: its type filtering turned mediaProcessing into "none" on Android 16.
+            startForeground(ID, build(this, title, progress), type)
         } catch (e: Exception) {
             Log.w(TAG, "Couldn't start the foreground service", e)
             stopSelf()

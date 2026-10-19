@@ -1,7 +1,6 @@
 package com.michaelkitticai.statuscompressor
 
 import android.content.Context
-import android.media.MediaCodecInfo
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -193,12 +192,9 @@ class VideoCompressor(private val context: Context) {
         suspendCancellableCoroutine<Unit> { cont ->
             val hardware = DefaultEncoderFactory.Builder(context)
                 .setRequestedVideoEncoderSettings(
-                    // Phone encoders in the default VBR mode undershoot badly (asked for 4 Mbps, got
-                    // 1.8 Mbps and a smeary file). CBR makes them actually spend the bits.
-                    VideoEncoderSettings.Builder()
-                        .setBitrate(plan.bitrate)
-                        .setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
-                        .build()
+                    // No CBR: some encoders (MediaTek) reject it and the export fails outright.
+                    // VBR may undershoot the bitrate, which only makes the fallback a bit softer.
+                    VideoEncoderSettings.Builder().setBitrate(plan.bitrate).build()
                 )
                 // Keeps the whole file (video + audio) under WhatsApp's re-encode limit.
                 .setRequestedAudioEncoderSettings(AudioEncoderSettings.Builder().setBitrate(96_000).build())
@@ -210,6 +206,8 @@ class VideoCompressor(private val context: Context) {
             val spanUs = ((clip?.let { it.second - it.first } ?: info.durationMs) * 1000).coerceAtLeast(1)
             val firstPtsUs = AtomicLong(C.TIME_UNSET)
             val encodedUs = AtomicLong(0)
+            // Frames in or out of x264; the watchdog only gives up when neither moves.
+            val activity = AtomicLong(0)
             val x264Settings = X264Settings(
                 bitrate = plan.bitrate,
                 maxBitrate = (plan.bitrate * 1.07).toInt(),
@@ -217,7 +215,9 @@ class VideoCompressor(private val context: Context) {
                 onFrameEncoded = { ptsUs ->
                     firstPtsUs.compareAndSet(C.TIME_UNSET, ptsUs)
                     encodedUs.accumulateAndGet(ptsUs - firstPtsUs.get()) { a, b -> max(a, b) }
+                    activity.incrementAndGet()
                 },
+                onFrameIn = { activity.incrementAndGet() },
             )
             val encoders = if (useX264) X264EncoderFactory(x264Settings, hardware) else hardware
 
@@ -232,14 +232,6 @@ class VideoCompressor(private val context: Context) {
                 // Encode portrait as portrait (720x1280), like the clips WhatsApp left untouched,
                 // instead of landscape plus a rotation flag.
                 .setPortraitEncodingEnabled(useX264)
-                .apply {
-                    // The GPU must wait for x264, not race ahead of it (that drops frames).
-                    if (useX264) {
-                        experimentalSetMaxFramesInEncoder(
-                            X264.maxFramesInEncoder(plan.width, plan.height, 30, x264Settings)
-                        )
-                    }
-                }
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                         Log.i(TAG, "Export done: ${out.length()} bytes, encoder ${exportResult.videoEncoderName}")
@@ -293,7 +285,7 @@ class VideoCompressor(private val context: Context) {
                 .build()
 
             val holder = ProgressHolder()
-            var lastEncodedUs = -1L
+            var lastActivity = -1L
             var lastActivityMs = SystemClock.elapsedRealtime()
             poll = Runnable {
                 if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {
@@ -304,12 +296,12 @@ class VideoCompressor(private val context: Context) {
                 // Watchdog: x264 should turn out frames steadily. If nothing comes for a while,
                 // something is stuck; give up on x264 and let compress() retry without it.
                 val now = SystemClock.elapsedRealtime()
-                if (encodedUs.get() != lastEncodedUs) {
-                    lastEncodedUs = encodedUs.get()
+                if (activity.get() != lastActivity) {
+                    lastActivity = activity.get()
                     lastActivityMs = now
                 }
                 if (useX264 && now - lastActivityMs > STALL_MS) {
-                    Log.w(TAG, "x264 stalled: no new frame for ${STALL_MS / 1000} s (encoded up to $lastEncodedUs us)")
+                    Log.w(TAG, "x264 stalled: no frame in or out for ${STALL_MS / 1000} s (encoded up to ${encodedUs.get()} us)")
                     transformer.cancel()
                     out.delete()
                     if (cont.isActive) cont.resumeWithException(X264FailedException("x264 stalled"))

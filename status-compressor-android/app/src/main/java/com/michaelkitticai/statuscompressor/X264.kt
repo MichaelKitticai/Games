@@ -43,22 +43,6 @@ object X264 {
         settings.bitrate / 1000, settings.maxBitrate / 1000, settings.maxBitrate * 2 / 1000,
         settings.preset, settings.tune,
     )
-
-    /**
-     * How many frames may be in the encoder at once without the GPU outrunning it. x264 holds up to
-     * its delay (lookahead, B-frames, threads) before returning anything, plus a few in our queue.
-     */
-    fun maxFramesInEncoder(width: Int, height: Int, fps: Int, settings: X264Settings): Int {
-        val handle = open(width, height, fps, settings)
-        if (handle == 0L) return C.INDEX_UNSET
-        return try {
-            nativeMaxDelayedFrames(handle) + QUEUED_FRAMES
-        } finally {
-            nativeClose(handle)
-        }
-    }
-
-    const val QUEUED_FRAMES = 6
 }
 
 /** x264 settings for one export. */
@@ -69,6 +53,8 @@ data class X264Settings(
     val tune: String = "film",
     /** Called on the encoder thread with each encoded frame's timestamp, for progress. */
     val onFrameEncoded: ((ptsUs: Long) -> Unit)? = null,
+    /** Called for each frame x264 takes in. It holds many before the first comes out. */
+    val onFrameIn: (() -> Unit)? = null,
 )
 
 /**
@@ -122,13 +108,19 @@ private class X264Codec(requested: Format, settings: X264Settings) : Codec {
 
     private val outputFormat: Format
 
-    // Transformer limits frames in flight (see X264.maxFramesInEncoder), so these stay small.
+    // Backpressure: when x264 falls behind, the reader thread waits here, so the GPU pipeline
+    // upstream waits too (its surface has no free buffers). Nothing piles up and nothing drops.
     private val pool = ConcurrentLinkedQueue<ByteBuffer>()
-    private val frames = LinkedBlockingQueue<Frame>()
+    private val frames = LinkedBlockingQueue<Frame>(QUEUE_FRAMES)
     private val reader = GlFrameReader(width, height) { rgba, ptsUs ->
         val yuv = pool.poll() ?: ByteBuffer.allocateDirect(width * height * 3 / 2)
         X264.nativeConvert(handle, rgba, width * 4, yuv)
-        frames.add(Frame(yuv, ptsUs))
+        putFrame(Frame(yuv, ptsUs))
+        settings.onFrameIn?.invoke()
+    }
+
+    private fun putFrame(frame: Frame) {
+        while (!released && !frames.offer(frame, 100, TimeUnit.MILLISECONDS)) Unit
     }
     private val outputs = ConcurrentLinkedQueue<Output>()
     @Volatile private var encoderDone = false
@@ -195,7 +187,7 @@ private class X264Codec(requested: Format, settings: X264Settings) : Codec {
 
     override fun signalEndOfInputStream() {
         // Every frame was rendered to the surface before this call; end once they're all read.
-        reader.afterPendingFrames { frames.add(Frame(null, C.TIME_END_OF_SOURCE)) }
+        reader.afterPendingFrames { putFrame(Frame(null, C.TIME_END_OF_SOURCE)) }
     }
 
     override fun getOutputFormat(): Format {
@@ -229,6 +221,8 @@ private class X264Codec(requested: Format, settings: X264Settings) : Codec {
     }
 
     companion object {
+        private const val QUEUE_FRAMES = 4
+
         /** Splits x264's Annex B headers into SPS and PPS (each keeping its start code), for csd-0/csd-1. */
         fun splitParameterSets(annexB: ByteArray): Pair<ByteArray, ByteArray> {
             val starts = mutableListOf<Int>()
