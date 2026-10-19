@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.ceil
@@ -181,10 +182,19 @@ class VideoCompressor(private val context: Context) {
                 .setEnableFallback(true)
                 .build()
             // x264 when available; the phone's encoder is the fallback.
+            // Transformer can't report progress for files that don't store their length (many
+            // stock videos), so also track how far x264 has got.
+            val spanUs = ((clip?.let { it.second - it.first } ?: info.durationMs) * 1000).coerceAtLeast(1)
+            val firstPtsUs = AtomicLong(C.TIME_UNSET)
+            val encodedUs = AtomicLong(0)
             val x264Settings = X264Settings(
                 bitrate = plan.bitrate,
                 maxBitrate = (plan.bitrate * 1.07).toInt(),
                 preset = plan.x264Preset,
+                onFrameEncoded = { ptsUs ->
+                    firstPtsUs.compareAndSet(C.TIME_UNSET, ptsUs)
+                    encodedUs.accumulateAndGet(ptsUs - firstPtsUs.get()) { a, b -> max(a, b) }
+                },
             )
             val encoders = X264EncoderFactory(x264Settings, hardware)
 
@@ -262,6 +272,8 @@ class VideoCompressor(private val context: Context) {
             poll = Runnable {
                 if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {
                     onProgress(holder.progress / 100f)
+                } else if (encodedUs.get() > 0) {
+                    onProgress(minOf(0.99f, encodedUs.get().toFloat() / spanUs))
                 }
                 handler.postDelayed(poll, 250)
             }

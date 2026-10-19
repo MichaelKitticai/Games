@@ -66,6 +66,8 @@ data class X264Settings(
     val maxBitrate: Int,
     val preset: String = "slow",
     val tune: String = "film",
+    /** Called on the encoder thread with each encoded frame's timestamp, for progress. */
+    val onFrameEncoded: ((ptsUs: Long) -> Unit)? = null,
 )
 
 /**
@@ -98,6 +100,8 @@ class X264EncoderFactory(
  */
 @OptIn(UnstableApi::class)
 private class X264Codec(requested: Format, settings: X264Settings) : Codec {
+
+    private val onFrameEncoded = settings.onFrameEncoded
 
     private class Frame(val yuv: ByteBuffer?, val ptsUs: Long) // yuv == null: end of stream
     private class Output(val data: ByteBuffer, val info: MediaCodec.BufferInfo)
@@ -164,6 +168,7 @@ private class X264Codec(requested: Format, settings: X264Settings) : Codec {
             set(0, data.size, info[0], if (info[2] != 0L) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
         }
         outputs.add(Output(ByteBuffer.wrap(data), bufferInfo))
+        onFrameEncoded?.invoke(info[0])
     }
 
     private fun checkError() {
