@@ -1,6 +1,7 @@
 package com.michaelkitticai.statuscompressor
 
 import android.content.Context
+import android.media.MediaCodecInfo
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -160,7 +161,12 @@ class VideoCompressor(private val context: Context) {
         suspendCancellableCoroutine<Unit> { cont ->
             val encoders = DefaultEncoderFactory.Builder(context)
                 .setRequestedVideoEncoderSettings(
-                    VideoEncoderSettings.Builder().setBitrate(plan.bitrate).build()
+                    // Phone encoders in the default VBR mode undershoot badly (asked for 4 Mbps, got
+                    // 1.8 Mbps and a smeary file). CBR makes them actually spend the bits.
+                    VideoEncoderSettings.Builder()
+                        .setBitrate(plan.bitrate)
+                        .setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                        .build()
                 )
                 .setEnableFallback(true)
                 .build()
