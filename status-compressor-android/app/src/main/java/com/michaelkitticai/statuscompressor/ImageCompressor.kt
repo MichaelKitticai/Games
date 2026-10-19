@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.net.Uri
 import java.io.ByteArrayOutputStream
@@ -34,6 +35,9 @@ object ImageCompressor {
             h = fitted.second
             decoder.setTargetSize(w, h)
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            // Phones shoot in Display P3. Saved as-is, the JPEG gets read as sRGB (WhatsApp drops
+            // the color profile) and looks washed out. Convert to sRGB so colors stay true.
+            decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
             decoder.isMutableRequired = true
         }
 

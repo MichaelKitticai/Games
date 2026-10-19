@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <x264.h>
 
 typedef struct {
@@ -54,7 +55,10 @@ Java_com_michaelkitticai_statuscompressor_X264_nativeOpen(
     param.b_vfr_input = 1;
     param.i_keyint_max = fps * 4;
     // Shorter lookahead than the preset's default: fewer frames held in memory, tiny quality cost.
-    if (param.rc.i_lookahead > 30) param.rc.i_lookahead = 30;
+    if (param.rc.i_lookahead > 20) param.rc.i_lookahead = 20;  /* 20 scored the same as 30 */
+    /* Every frame thread adds a frame of delay (and memory) before the first output. */
+    long cores = sysconf(_SC_NPROCESSORS_ONLN);
+    param.i_threads = cores > 8 ? 8 : (cores < 1 ? 1 : (int) cores);
     param.rc.i_rc_method = X264_RC_ABR;
     param.rc.i_bitrate = bitrateKbps;
     param.rc.i_vbv_max_bitrate = maxrateKbps;

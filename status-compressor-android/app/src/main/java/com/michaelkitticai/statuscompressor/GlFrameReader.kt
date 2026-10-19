@@ -19,6 +19,11 @@ import java.util.concurrent.CountDownLatch
 /**
  * An input [Surface] whose frames come back as RGBA pixels, top row first.
  *
+ * Android drops a frame whenever a new one arrives before the previous one was picked up (the
+ * renderer and this reader are both in-app, so the queue is "droppable"). So this thread only
+ * picks the frame up and copies it out; [onFrame] must hand the buffer off and return at once,
+ * and give it back later with [recycle].
+ *
  * Unlike ImageReader (which drops frames whenever its reader falls behind), this reads through a
  * SurfaceTexture, the way MediaCodec's input surfaces work: the renderer waits for us instead, so
  * every frame arrives. Frames are delivered in order on this reader's own thread.
@@ -39,7 +44,7 @@ class GlFrameReader(
     private var oesTexture = 0
     private var framebuffer = 0
     private var colorTexture = 0
-    private val pixels = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder())
+    private val pool = java.util.concurrent.ConcurrentLinkedQueue<ByteBuffer>()
     private val stMatrix = FloatArray(16)
     var framesRead = 0
         private set
@@ -66,6 +71,11 @@ class GlFrameReader(
         }
         ready.await()
         failure?.let { throw it }
+    }
+
+    /** Returns a buffer from [onFrame] for reuse. */
+    fun recycle(rgba: ByteBuffer) {
+        pool.add(rgba)
     }
 
     /** Runs [block] on the reader thread after every frame rendered so far has been delivered. */
@@ -170,6 +180,7 @@ class GlFrameReader(
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTexture)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        val pixels = pool.poll() ?: ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.nativeOrder())
         pixels.clear()
         GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixels)
         framesRead++

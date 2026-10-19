@@ -232,6 +232,15 @@ class VideoCompressor(private val context: Context) {
                 // Encode portrait as portrait (720x1280), like the clips WhatsApp left untouched,
                 // instead of landscape plus a rotation flag.
                 .setPortraitEncodingEnabled(useX264)
+                .apply {
+                    // Pace the GPU pipeline by x264's output. Without this, Android drops frames
+                    // whenever x264 falls behind the decoder (choppy video on fast phones).
+                    if (useX264) {
+                        val max = X264.maxFramesInEncoder(plan.width, plan.height, x264Settings)
+                        Log.i(TAG, "x264 max frames in encoder: $max")
+                        experimentalSetMaxFramesInEncoder(max)
+                    }
+                }
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                         Log.i(TAG, "Export done: ${out.length()} bytes, encoder ${exportResult.videoEncoderName}")
