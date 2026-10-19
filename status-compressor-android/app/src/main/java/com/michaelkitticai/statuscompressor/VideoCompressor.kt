@@ -15,6 +15,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.Presentation
+import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
@@ -38,7 +39,14 @@ data class VideoInfo(val width: Int, val height: Int, val durationMs: Long)
 
 data class VideoPart(val file: File, val durationMs: Long)
 
-data class VideoPlan(val width: Int, val height: Int, val bitrate: Int, val parts: Int, val sharpen: Float)
+data class VideoPlan(
+    val width: Int,
+    val height: Int,
+    val bitrate: Int,
+    val parts: Int,
+    val sharpen: Float,
+    val x264Preset: String,
+)
 
 @OptIn(UnstableApi::class)
 class VideoCompressor(private val context: Context) {
@@ -74,7 +82,7 @@ class VideoCompressor(private val context: Context) {
                 return format.getLong(MediaFormat.KEY_DURATION) / 1000
             }
             ex.selectTrack(track)
-            ex.seekTo(Long.MAX_VALUE, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            // Fragmented MP4s can't seek to the end, so walk every sample (headers only, quick).
             var last = 0L
             while (ex.sampleTime >= 0) {
                 last = max(last, ex.sampleTime)
@@ -105,7 +113,7 @@ class VideoCompressor(private val context: Context) {
             val sourceBitrate = originalSize * 8 / durationS
             bitrate = minOf(bitrate, max(1_000_000.0, sourceBitrate))
         }
-        return VideoPlan(w, h, bitrate.toInt(), parts, preset.videoSharpen)
+        return VideoPlan(w, h, bitrate.toInt(), parts, preset.videoSharpen, preset.x264Preset)
     }
 
     /**
@@ -159,7 +167,7 @@ class VideoCompressor(private val context: Context) {
         // Transformer must be created, driven and cancelled on a Looper thread.
         val handler = Handler(Looper.getMainLooper())
         suspendCancellableCoroutine<Unit> { cont ->
-            val encoders = DefaultEncoderFactory.Builder(context)
+            val hardware = DefaultEncoderFactory.Builder(context)
                 .setRequestedVideoEncoderSettings(
                     // Phone encoders in the default VBR mode undershoot badly (asked for 4 Mbps, got
                     // 1.8 Mbps and a smeary file). CBR makes them actually spend the bits.
@@ -168,8 +176,17 @@ class VideoCompressor(private val context: Context) {
                         .setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
                         .build()
                 )
+                // Keeps the whole file (video + audio) under WhatsApp's re-encode limit.
+                .setRequestedAudioEncoderSettings(AudioEncoderSettings.Builder().setBitrate(96_000).build())
                 .setEnableFallback(true)
                 .build()
+            // x264 when available; the phone's encoder is the fallback.
+            val x264Settings = X264Settings(
+                bitrate = plan.bitrate,
+                maxBitrate = (plan.bitrate * 1.07).toInt(),
+                preset = plan.x264Preset,
+            )
+            val encoders = X264EncoderFactory(x264Settings, hardware)
 
             lateinit var poll: Runnable
             val transformer = Transformer.Builder(context)
@@ -179,6 +196,17 @@ class VideoCompressor(private val context: Context) {
                 // 4K decode plus tone mapping can stall longer than the 10 s default and fail with
                 // ERROR_CODE_MUXING_TIMEOUT on slower phones. Let it take as long as it needs.
                 .setMaxDelayBetweenMuxerSamplesMs(C.TIME_UNSET)
+                // Encode portrait as portrait (720x1280), like the clips WhatsApp left untouched,
+                // instead of landscape plus a rotation flag.
+                .setPortraitEncodingEnabled(X264.available)
+                .apply {
+                    // The GPU must wait for x264, not race ahead of it (that drops frames).
+                    if (X264.available) {
+                        experimentalSetMaxFramesInEncoder(
+                            X264.maxFramesInEncoder(plan.width, plan.height, 30, x264Settings)
+                        )
+                    }
+                }
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                         handler.removeCallbacks(poll)

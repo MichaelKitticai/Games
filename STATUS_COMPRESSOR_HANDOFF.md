@@ -57,14 +57,27 @@ saved, average % smaller), stored in SharedPreferences.
 |---|---|---|---|---|
 | Photo max | 2560 px long edge | 1600 px | 1080 x 1920 | 1080 x 1920 |
 | Photo size cap | 3.5 MB | 1 MB | 4 MB | 4 MB |
-| Video | 1080p, ≤ 6 Mbps | 720p, ≤ 3.5 Mbps, each part ≤ ~16 MB | 1080p, ≤ 8 Mbps | 1080p, ≤ 10 Mbps |
+| Video | 720p, 1.45 Mbps (x264 slow) | 480p, ≤ 2 Mbps, each part ≤ ~16 MB | 1080p, ≤ 8 Mbps | 1080p, ≤ 10 Mbps |
 | Split long videos | even parts ≤ 60 s | even parts ≤ 60 s | no | no |
 
 **Video pipeline** (`VideoCompressor.kt`): Media3 Transformer, H.264 + AAC,
-`Presentation` scale-to-fit, `FrameDropEffect` to 30 fps, HDR to SDR tone
-mapping via OpenGL (most new phones record HDR, which looks washed out on
-WhatsApp), hardware encoder with fallback. Bitrate is capped at the source's
-bitrate so lean files don't grow. Splits evenly (70 s → 2 x 35 s).
+step-halving downscale then `Presentation` scale-to-fit, `FrameDropEffect` to
+30 fps, HDR to SDR tone mapping via OpenGL. Video is encoded with **x264**
+(`X264.kt`, `GlFrameReader.kt`, `cpp/x264_jni.c`), plugged into Media3 as a
+custom `Codec`; the phone's hardware encoder is only a fallback. Bitrate is
+capped at the source's bitrate. Splits evenly (70 s → 2 x 35 s). Fragmented
+MP4s (many stock videos) report 0 duration; the length is read from samples.
+
+**Why x264 (measured, Oct 2026, Android, WhatsApp HD upload on):**
+- WhatsApp Status re-encodes any video over ~1.7 Mbps to 720p at ~1.8 Mbps with
+  a weak encoder. Videos **under ~1.66 Mbps pass through untouched** (720p or
+  1080p, with AAC audio, 6 s and 33 s tested). 1.94 Mbps and up were re-encoded.
+- So the app makes 720p at ~1.6 Mbps total, and spends those bits with x264.
+  SSIM vs original: x264 veryslow 0.946, slow 0.937, WhatsApp's own HD 0.914,
+  hardware encoder at the same bitrate ~0.84.
+- The user preferred test clip N: 720p30, x264 veryslow, film tune, 1.66 Mbps.
+- "Send to yourself in HD then forward to Status" helps on iPhone, hurts on Android.
+- x264 is GPL, so the app's source must stay open (the repo is public).
 
 **Photo pipeline** (`ImageCompressor.kt`): `ImageDecoder` (EXIF rotation,
 HEIC), resize once, flatten transparency onto white, thresholded unsharp mask
@@ -84,8 +97,13 @@ item at a time, cancel, stats), `App.kt` (Compose UI), `Presets.kt`,
 
 ## Status / what's verified
 
-- Android build #1 on GitHub Actions: **passed**; APK is signed (v2/v3) and published.
-- **Not yet tested on a real phone.** Nothing on Android has been run, only compiled.
+- Real phone: installs and runs; earlier builds tested by the user.
+- Self-update over the air (`Updater.kt`, `latest.json` in the `android-latest` release) works.
+- x264 build tested on an arm64 emulator: correct picture, 720x1280 portrait,
+  1.44 Mbps video + 145 kbps audio, splitting 75 s into 2 parts. The emulator's
+  software decoder drops ~0.5% of frames before the encoder; the phone's hardware
+  path didn't, so this is likely emulator-only. **Check smoothness on a real phone.**
+- Encoding speed on phones is unknown; on the emulator a 75 s 1440p60 clip took ~7 min.
 - Web version was tested in headless Chromium: photo resizing, video splitting,
   30 fps, audio kept, and offline mode all worked. Two bugs found and fixed
   (audio-only "Ready" output when video couldn't be decoded; fractional bitrate).
@@ -93,8 +111,8 @@ item at a time, cancel, stats), `App.kt` (Compose UI), `Presets.kt`,
 
 ## Known caveats / to-do
 
-1. **Test on a real Android phone** and fix whatever comes up (share sheet entry,
-   Status button behavior, HDR clips, long 4K videos, HEIC photos).
+1. **Test the x264 build on a real phone**: speed on long videos, smoothness,
+   and confirm WhatsApp passes the app's output through untouched.
 2. **Signing key is in the public repo** (`status-compressor-android/keystore/shared.keystore`,
    password `statuscompressor`). Fine for testing; before sharing publicly or using
    the Play Store, create a private key and pass it via GitHub secrets
@@ -107,10 +125,11 @@ item at a time, cancel, stats), `App.kt` (Compose UI), `Presets.kt`,
 
 ## Building locally
 
-Needs Android Studio, or JDK 17 + Android SDK 36:
+Needs Android Studio, or JDK 17 + Android SDK 36, NDK 27.0.12077973 and CMake 3.22.1:
 
 ```sh
 cd status-compressor-android
+scripts/build-x264.sh   # once; builds x264 into app/src/main/cpp/x264
 ./gradlew assembleRelease
 # → app/build/outputs/apk/release/app-release.apk
 ```

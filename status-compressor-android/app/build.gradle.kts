@@ -12,6 +12,7 @@ val buildNumber = (System.getenv("VERSION_CODE") ?: "1").toInt()
 android {
     namespace = "com.michaelkitticai.statuscompressor"
     compileSdk = 36
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.michaelkitticai.statuscompressor"
@@ -19,6 +20,18 @@ android {
         targetSdk = 36
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
+
+        ndk {
+            // x264 is built for these by scripts/build-x264.sh.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     signingConfigs {
