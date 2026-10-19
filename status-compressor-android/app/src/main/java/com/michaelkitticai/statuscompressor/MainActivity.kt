@@ -21,6 +21,12 @@ class MainActivity : ComponentActivity() {
         setContent { App(vm) }
     }
 
+    override fun onResume() {
+        super.onResume()
+        Updater.resumeIfPending(this)
+        Updater.check(this)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

@@ -44,12 +44,25 @@ jobs:
           path: status-compressor-android/StatusCompressor.apk
 
       # A rolling "latest" release gives a stable link you can open on your phone.
+      # latest.json is the app's update feed: installed copies offer the update when versionCode is higher.
+      - name: Write update feed
+        env:
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          jq -n --argjson code ${{ github.run_number }} --arg notes "$(printf '%s' "$NOTES" | head -1)" '{
+            versionCode: $code,
+            versionName: ("1.0." + ($code|tostring)),
+            apkUrl: "https://github.com/MichaelKitticai/Games/releases/download/android-latest/StatusCompressor.apk",
+            notes: $notes
+          }' > latest.json
+          cat latest.json
+
       - name: Publish latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete android-latest --yes --cleanup-tag || true
-          gh release create android-latest StatusCompressor.apk \
+          gh release create android-latest StatusCompressor.apk latest.json \
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "Status Compressor (latest build #${{ github.run_number }})" \
