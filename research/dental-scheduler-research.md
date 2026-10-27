@@ -12,7 +12,7 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 | Open Dental | Desktop (self-hosted) | Flat per-location price, very customizable. Detailed appointment model (provider, hygienist, operatory, confirmation, arrived/seated/dismissed times). |
 | Curve Dental | Cloud (browser) | Top user ratings for appointment management. Charting plus patient engagement in one. |
 | Denticon | Cloud | Aimed at large groups (DSOs). Heavy for a single clinic. |
-| kumoDent, CxSYS | Malaysian systems | kumoDent is cloud with real-time EMR sync across branches. CxSYS runs on the clinic network or cloud. |
+| Dentrove | Cloud (Kenya, Uganda, Tanzania) | Local competitor. Reminders by WhatsApp, SMS and email, recalls, invoicing in local currency, M-Pesa payments. |
 | Deputy, Shifton, Shyfter | Staff rostering | Shifts, clock-in with PIN/photo, leave, some task assignment. Not connected to the patient schedule. |
 
 **Gap we can fill:** most practice systems are built around reception and billing. Staff rostering tools are separate products. Very few give each dentist/nurse a simple "my day" view on their phone that updates live when reception changes something. That is our hook.
@@ -23,12 +23,13 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 
 ### Personal and contact
 - Full name, preferred name
-- IC / passport number (or national ID for the country)
+- National ID or passport number (birth certificate number for children)
+- SHA (Social Health Authority) member number
 - Date of birth, gender
-- Address
-- Mobile phone, email
-- Preferred contact method (SMS, WhatsApp, email, call)
-- Preferred language
+- Address / estate, town
+- Mobile phone (also used for M-Pesa), email
+- Preferred contact method (SMS, WhatsApp, email, call). Many patients may not have a smartphone, so SMS must always work
+- Preferred language (English, Kiswahili)
 - Photo (optional, helps staff recognise the patient)
 - How they heard about the clinic / referred by
 
@@ -37,12 +38,14 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 - Responsible party / guarantor (who pays, needed for minors)
 - Parent or guardian details and consent for children
 
-### Insurance / panel / employer coverage
-- Primary carrier (insurer, panel or company scheme)
-- Subscriber name and date of birth, relationship to patient
-- Member ID, policy or group number, insurer phone
-- Secondary coverage (some patients have two)
-- Coverage limits and remaining balance (if the clinic tracks it)
+### Payer: cash, SHA, private insurance or employer scheme
+- Payer type: cash / M-Pesa, SHA, private insurer, corporate scheme
+- Private insurer (for example AAR, Jubilee, CIC, Britam, Madison) and scheme / employer name
+- Principal member name and relationship to patient
+- Member number, policy or scheme number
+- Dental cover limit and amount used (dental limits in Kenya are often around KES 10,000 to 20,000 a year)
+- Pre-authorisation needed? Pre-auth number and approval status
+- Secondary cover (for example SHA plus a private insurer)
 
 ### Medical history
 - Under a doctor's care? Doctor name and phone
@@ -62,7 +65,8 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 - Past treatments (braces, implants, root canals)
 
 ### Consent and privacy
-- Privacy notice acknowledgement (PDPA in Malaysia, HIPAA in the US, GDPR in Europe)
+- Privacy notice acknowledgement (Kenya Data Protection Act 2019)
+- Explicit consent to process health data (it is "sensitive personal data" under the Act)
 - Consent to treatment
 - Consent to receive reminders by SMS/WhatsApp/email
 - Authorisation to share info with insurer or other providers
@@ -78,8 +82,9 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 
 ### Financial
 - Invoices, payments, balance owing
-- Payment method
-- Insurance claims and status
+- Payment method: M-Pesa (till / paybill, transaction code), cash, card, insurance
+- Booking deposit paid by M-Pesa (local vendors report deposits of KES 500 to 1,000 sharply reduce no-shows)
+- SHA and insurance claims, status, and date paid (insurers can take 3+ months to pay)
 
 ### Recall
 - Recall type (cleaning every 6 months, check-up, perio maintenance every 3 months)
@@ -131,10 +136,13 @@ Plus: `Cancelled`, `No-show / Broken`, `Rescheduled`, `Unscheduled` (needs a new
 - Colour on the schedule
 
 ### Credentials
-- Registration / licence number (for example Malaysian Dental Council APC)
-- Licence expiry date with reminders
+- KMPDC (Kenya Medical Practitioners and Dentists Council) registration number
+- Annual practising licence: year and expiry. Renewal is due by 30 November each year, with penalties or suspension if late
+- CPD points (at least 50 needed for licence renewal)
+- Professional indemnity cover and expiry (required for renewal)
+- Nursing Council of Kenya / other registration for nurses and other cadres
 - CPR / BLS certification expiry
-- Continuing education records
+- The clinic's own KMPDC facility licence expiry
 
 ### Availability
 - Working days and hours per week
@@ -167,7 +175,14 @@ Plus: `Cancelled`, `No-show / Broken`, `Rescheduled`, `Unscheduled` (needs a new
 
 ## 5. Privacy and security requirements
 
-Health data is "sensitive personal data" under Malaysia's PDPA. The 2024 amendments (in force through 2025) add mandatory breach notification to the Commissioner and raise fines to RM1,000,000 and/or 3 years jail. The US equivalent is HIPAA; Europe is GDPR.
+Kenya's rules come from the **Data Protection Act 2019** and the **Data Protection (General) Regulations 2021**, enforced by the **ODPC** (Office of the Data Protection Commissioner).
+
+- **Health data is sensitive personal data.** Processing it is treated as high risk, so a Data Protection Impact Assessment (DPIA) is expected.
+- **ODPC registration.** The clinic (data controller) must register with the ODPC; the certificate lasts 2 years. If we host the data for clinics, we are a **data processor** and must register too.
+- **Breach notification.** The clinic must notify the ODPC within **72 hours**. As processor, we must tell the clinic within **48 hours**. Patients must be told if there is high risk to them.
+- **Data localisation (Regulation 26).** Data processed for listed "strategic interests", which include primary and secondary healthcare, must be processed on a server in Kenya **or** have at least a copy stored in Kenya. Confirm the exact scope with a Kenyan data protection lawyer.
+- **Cross-border transfer** of health data generally needs explicit consent plus an approved safeguard. The ODPC published new cross-border transfer guidance on 8 September 2026.
+- The 2025 M-Tiba breach (health data of about 5 million Kenyans, detected 10 days late) shows why monitoring matters.
 
 The app must have:
 - Encrypted data in transit (HTTPS) and at rest
@@ -176,9 +191,10 @@ The app must have:
 - Audit trail
 - Automatic logout on shared reception computers
 - Daily backups
-- Data hosted in a region acceptable to the clinic (check cross-border transfer rules)
+- Data hosted in Kenya, or at minimum a full copy kept in Kenya (see hosting below)
 - Patient consent records
-- A breach response plan
+- A breach response plan that meets the 48 / 72 hour deadlines
+- Monitoring and alerts for unusual access
 
 ---
 
@@ -188,7 +204,7 @@ The app must have:
 - [ ] Clinic setup: clinic details, opening hours, chairs/rooms, appointment types with default lengths
 - [ ] Staff accounts with roles (owner, dentist, hygienist, nurse, reception) and login
 - [ ] Patient records: personal, contact, emergency contact, medical alert, basic medical history, notes
-- [ ] Fast patient search (name, phone, IC)
+- [ ] Fast patient search (name, phone, national ID)
 - [ ] Appointment book: day/week view, columns per chair or per dentist, drag to move, colour by dentist/type
 - [ ] Create / edit / cancel / reschedule appointments
 - [ ] Assign dentist + nurse + chair to each appointment, with double booking prevention
@@ -199,19 +215,21 @@ The app must have:
 - [ ] Simple task list: reception or manager assigns tasks to staff, staff tick them off
 - [ ] Audit log and role based permissions
 - [ ] Works on desktop browser and phone (installable web app)
+- [ ] Works on slow mobile data, and basic offline mode: today's schedule stays visible and changes queue up during internet or power outages, then sync
 
 ### Phase 2: Patient facing and efficiency
-- [ ] Appointment reminders and confirmations by SMS / WhatsApp / email (patient replies to confirm)
+- [ ] Appointment reminders and confirmations by SMS (always) and WhatsApp (patient replies to confirm)
+- [ ] M-Pesa payments and booking deposits (Daraja API, STK push to the patient's phone)
 - [ ] Digital new patient form on a tablet or link (replaces paper intake form, with e-signature consent)
 - [ ] Online booking page
 - [ ] ASAP / waitlist to fill cancellations
 - [ ] No-show and unscheduled treatment lists
 - [ ] Recall system (auto create recall due date after a cleaning, send reminder)
 - [ ] Staff rostering: working hours, leave requests, chair assignment
-- [ ] Credential tracking with licence / CPR expiry alerts
+- [ ] Credential tracking with KMPDC licence, CPD points, indemnity and CPR expiry alerts
 - [ ] Morning huddle screen
 - [ ] Reports: appointments per day, no-show rate, chair utilisation, waiting time
-- [ ] Offline mode (keep working if the internet drops, sync when back)
+- [ ] Bilingual interface and messages (English / Kiswahili)
 
 ### Phase 3: Full practice management
 - [ ] Tooth chart and perio chart
@@ -219,7 +237,7 @@ The app must have:
 - [ ] X-ray and photo upload
 - [ ] Treatment plans with cost estimates
 - [ ] Billing, invoices, receipts, payments
-- [ ] Insurance / panel claims
+- [ ] SHA and private insurer claims, pre-authorisation tracking, cover limit balance, unpaid claims ageing
 - [ ] Sterilisation log, opening/closing checklists, inventory, lab case tracking
 - [ ] Multi-branch support
 - [ ] Clock-in / clock-out
@@ -227,9 +245,10 @@ The app must have:
 
 ### Suggested technology
 - **Frontend:** a single web app (React / Next.js) that installs on phones as a PWA, so one codebase covers reception PC, tablets and phones
-- **Backend:** Supabase (Postgres database, login, real-time sync, row level security for permissions, file storage for X-rays) or Firebase
-- **Messaging:** WhatsApp Business API / Twilio for reminders
-- **Hosting:** region close to the clinic (for Malaysia, Singapore region) to meet PDPA expectations
+- **Backend:** Postgres with real-time sync, login and row level security. Supabase gives all of this and can be self-hosted
+- **Payments:** Safaricom M-Pesa Daraja API
+- **Messaging:** a Kenyan SMS gateway (for example Africa's Talking) plus WhatsApp Business API
+- **Hosting:** none of AWS, Azure, Google or Supabase cloud has a region in Kenya (the closest are in South Africa; Oracle has announced a Nairobi region). Because of Regulation 26, the safest choice is to **run the database on a server in a Nairobi data centre** (for example iXAfrica, Africa Data Centres or Safaricom), self-hosting Supabase there. The alternative is a South Africa cloud region **plus** a continuously updated copy in Kenya, which needs legal sign-off
 
 ---
 
@@ -240,11 +259,13 @@ The app must have:
 3. What do they write in the book for each appointment?
 4. What tasks do nurses check with reception for, besides patient list?
 5. Do they already use any software for billing or X-rays?
-6. Do they deal with insurance or company panels?
-7. Do they want patients to book online?
-8. What devices do the staff have: own phones, clinic tablets, one reception PC?
-9. Is internet at the clinic reliable?
-10. Who would pay, and how much would they pay per month?
+6. What share of patients pay cash / M-Pesa vs SHA vs private insurance? Which insurers?
+7. Do they have an M-Pesa till or paybill number?
+8. Do they want patients to book online? Would they charge a booking deposit?
+9. What devices do the staff have: own phones, clinic tablets, one reception PC?
+10. How reliable are internet and power at the clinic? Is there a backup?
+11. Are they registered with the ODPC as a data controller?
+12. Who would pay, and how much would they pay per month? (Local tools charge roughly KES 3,000 to 9,000 a month)
 
 ---
 
@@ -276,7 +297,20 @@ The app must have:
 - [Shyfter: Dental Practice Staff Scheduling](https://shyfter.co/en/industries/healthcare/dental-practice-staff-scheduling)
 - [HR Cloud: Dental HR Management](https://www.hrcloud.com/dental-hr-management-software)
 - [CE Zoom: Office Compliance](https://cezoom.com/office-compliance)
-- [NST: Cloud-based kumoDent](https://www.nst.com.my/amp/business/home/2021/11/747654/cloud-based-kumodent-aims-secure-300-dental-clinics-use-its-system-2022)
-- [DLA Piper: Data Protection in Malaysia](https://www.dlapiperdataprotection.com/?c=MY&t=law)
-- [Sidley: Important changes to Malaysia's data protection laws](https://www.sidley.com/en/insights/newsupdates/2024/08/important-changes-to-malaysias-data-protection-laws)
-- [Rajah & Tann: PDPA Amendment Bill 2024 analysis](https://www.rajahtannasia.com/?p=154128)
+- [ODPC: Data Protection (General) Regulations 2021](https://www.odpc.go.ke/wp-content/uploads/2024/03/THE-DATA-PROTECTION-GENERAL-REGULATIONS-2021-1.pdf)
+- [ODPC: Data Controllers compliance card](https://www.odpc.go.ke/wp-content/uploads/2025/07/Data-Controllers-360-Degrees-Compliance-Requirements.-Z-Card.pdf)
+- [ODPC: Report a Data Breach](https://www.odpc.go.ke/report-a-data-breach/)
+- [Digital Policy Alert: Kenya data localisation requirement](https://digitalpolicyalert.org/change/13685-data-localisation-requirement-in-data-protection-general-regulations)
+- [Oraro: Data Protection Regulations coming into force](https://www.oraro.co.ke/data-protection-the-coming-into-force-of-various-data-protection-regulations-and-what-you-need-to-know/)
+- [Inside Privacy: Kenya cross-border transfer guidance](https://www.insideprivacy.com/cross-border-transfers/kenya-issues-new-cross-border-data-transfer-guidance-familiar-concepts-but-important-local-differences/)
+- [Bowmans: Data breaches under Kenyan law](https://bowmanslaw.com/insights/kenya-a-few-insights-on-navigating-data-breaches-in-kenya-under-the-kenyan-data-protection-law/)
+- [TechCabal: M-Tiba breach](https://techcabal.com/2025/11/12/m-tiba-took-10-days-detect-breach-exposed-kenyan-health-data/)
+- [KMPDC: Renewal notice for health institutions 2026](https://kmpdc.go.ke/resources/notices/2025/RENEWAL_NOTICE_TO_ALL_HEALTH_INSTITUTIONS_FOR_THE_YEAR_2026.pdf)
+- [Kenya Times: KMPDC licence renewal](https://thekenyatimes.com/health/kmpdc-license-renewal/)
+- [Strathmore: Kenyan dentists' experience with dental insurance](https://su-plus.strathmore.edu/handle/11071/4589)
+- [Huduma Global: NHIF, SHA and private cover](https://hudumaglobal.com/blog/understanding-health-insurance-kenya-nhif-sha-private-medical-cover)
+- [AllAfrica: SHA registrations and NHIF debts](https://allafrica.com/stories/202606110484.html)
+- [Dentrove](https://slashdot.org/software/p/Dentrove/)
+- [Kolonell: Dental clinic app Nairobi 2026](https://kolonell.com/en/blog/dental-clinic-management-app-appointments-reminders-nairobi-2026)
+- [Supabase: Available regions](https://supabase.com/docs/guides/platform/regions)
+- [Developing Telecoms: Oracle cloud in Kenya](https://developingtelecoms.com/telecom-technology/telecom-cloud-virtualization/16151-oracle-expands-african-cloud-presence-into-kenya.html)
