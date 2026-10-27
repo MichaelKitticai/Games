@@ -1,0 +1,37 @@
+name: Meno CI
+
+on:
+  pull_request:
+    paths:
+      - 'meno/**'
+      - '.github/workflows/meno-*.yml'
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - 'meno/**'
+      - '.github/workflows/meno-*.yml'
+
+defaults:
+  run:
+    working-directory: meno
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: meno/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Bundle web build
+        run: npm run export:web

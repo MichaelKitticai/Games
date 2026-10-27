@@ -1,0 +1,71 @@
+name: Meno OTA update
+
+# Every push to main that touches the app publishes an over-the-air update to
+# the production channel. Installed apps pick it up on next launch or when
+# they come back to the foreground. Run manually to target another channel.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'meno/**'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'EAS Update channel'
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+
+concurrency:
+  group: meno-ota-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: meno
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Expo setup
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add an EXPO_TOKEN repository secret (see meno/README.md, OTA updates)."
+            exit 1
+          fi
+          if ! grep -q '"projectId"' app.json; then
+            echo "::error::Run 'npx eas-cli init' and 'npx eas-cli update:configure' in meno/ and commit app.json."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: meno/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Publish update
+        env:
+          CHANNEL: ${{ inputs.channel || 'production' }}
+          MESSAGE: ${{ github.event.head_commit.message || 'Manual update' }}
+        run: eas update --channel "$CHANNEL" --message "$MESSAGE" --non-interactive
