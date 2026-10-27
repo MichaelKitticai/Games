@@ -19,6 +19,34 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 
 ---
 
+## Nairobi specifics
+
+**Target market:** private dental clinics in Nairobi. Kenya has very few dentists (the Kenya Dental Association has cited about 793 registered nationally, around 1 per 70,000 people), so each dentist's chair time is valuable and a busy schedule is the norm. Nobody publishes an official count of Nairobi dental clinics. One commercial directory lists 589 dental clinics in Kenya, likely concentrated in Nairobi. We should build our own list (Google Maps, KDA directory) for sales.
+
+**What it means for the app:**
+
+| Nairobi reality | What we build |
+|---|---|
+| Traffic makes patients late or unsure when they will arrive | "I'm running late" reply on reminders, morning-of reminder, reception sees late arrivals live and can shuffle the chair |
+| Scheduled and unplanned KPLC power cuts (including the national blackout of 6 Feb 2026) | Offline mode, phones keep working on mobile data when the reception PC goes down |
+| Patients book and chat on WhatsApp and pay by M-Pesa | WhatsApp + SMS reminders, M-Pesa STK push for deposits and bills |
+| Neighbourhood addressing (estates, roads, landmarks) | Address fields: estate / area (Westlands, Kilimani, South B...), road, building, landmark |
+| Mix of cash, SHA and corporate insurance patients (many Nairobi employers give medical cover) | Payer type on every patient, insurer and scheme list, pre-auth tracking |
+| County licensing crackdowns on clinics with missing or expired documents | Compliance tracker for the clinic's own documents with expiry reminders (see below) |
+
+**Clinic documents to track (compliance module):**
+- Nairobi City County **Unified Business Permit** (valid January to December, late renewal penalty up to 3% a month, paid via the NairobiPay portal)
+- KMPDC facility licence and each practitioner's annual practising licence
+- County public health inspection, fire certificate
+- X-ray equipment licence from the Kenya Nuclear Regulatory Authority (requirements to confirm with KNRA)
+- ODPC data controller registration (renew every 2 years)
+
+**Hosting in Nairobi:** Nairobi has local data centres, so patient data can stay in the city.
+- **iXAfrica NBOX1** (opened February 2025, partnered with Safaricom) and **Africa Data Centres NBO1** offer colocation and enterprise cloud. Their packages target big customers, so for a startup the practical route is a **Kenyan hosting provider that rents servers inside one of these data centres**, running self-hosted Supabase (Postgres, login, real-time sync).
+- Short network distance from Nairobi clinics to a Nairobi server means fast sync, even on mobile data.
+
+---
+
 ## 1. Data collected from patients
 
 ### Personal and contact
@@ -26,7 +54,7 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 - National ID or passport number (birth certificate number for children)
 - SHA (Social Health Authority) member number
 - Date of birth, gender
-- Address / estate, town
+- Address: estate / area, road, building, landmark
 - Mobile phone (also used for M-Pesa), email
 - Preferred contact method (SMS, WhatsApp, email, call). Many patients may not have a smartphone, so SMS must always work
 - Preferred language (English, Kiswahili)
@@ -217,7 +245,10 @@ The app must have:
 - [ ] Works on desktop browser and phone (installable web app)
 - [ ] Works on slow mobile data, and basic offline mode: today's schedule stays visible and changes queue up during internet or power outages, then sync
 
+- [ ] "Patient running late" status and live update to the dentist's phone
+
 ### Phase 2: Patient facing and efficiency
+- [ ] Clinic compliance tracker: Nairobi UBP, KMPDC, fire, public health, KNRA, ODPC expiry reminders
 - [ ] Appointment reminders and confirmations by SMS (always) and WhatsApp (patient replies to confirm)
 - [ ] M-Pesa payments and booking deposits (Daraja API, STK push to the patient's phone)
 - [ ] Digital new patient form on a tablet or link (replaces paper intake form, with e-signature consent)
@@ -248,7 +279,7 @@ The app must have:
 - **Backend:** Postgres with real-time sync, login and row level security. Supabase gives all of this and can be self-hosted
 - **Payments:** Safaricom M-Pesa Daraja API
 - **Messaging:** a Kenyan SMS gateway (for example Africa's Talking) plus WhatsApp Business API
-- **Hosting:** none of AWS, Azure, Google or Supabase cloud has a region in Kenya (the closest are in South Africa; Oracle has announced a Nairobi region). Because of Regulation 26, the safest choice is to **run the database on a server in a Nairobi data centre** (for example iXAfrica, Africa Data Centres or Safaricom), self-hosting Supabase there. The alternative is a South Africa cloud region **plus** a continuously updated copy in Kenya, which needs legal sign-off
+- **Hosting:** a server in a Nairobi data centre (iXAfrica NBOX1 or Africa Data Centres NBO1, rented through a Kenyan hosting provider), self-hosting Supabase. This keeps patient data in Nairobi and meets Regulation 26. AWS, Azure, Google and Supabase cloud have no Kenya region (closest is South Africa), so they are a fallback only with a Kenyan copy and legal sign-off
 
 ---
 
@@ -266,6 +297,8 @@ The app must have:
 10. How reliable are internet and power at the clinic? Is there a backup?
 11. Are they registered with the ODPC as a data controller?
 12. Who would pay, and how much would they pay per month? (Local tools charge roughly KES 3,000 to 9,000 a month)
+13. Which part of Nairobi is the clinic in, and where do most patients travel from? How often are patients late?
+14. Which permits and licences do they renew each year, and who keeps track of them now?
 
 ---
 
@@ -312,5 +345,17 @@ The app must have:
 - [AllAfrica: SHA registrations and NHIF debts](https://allafrica.com/stories/202606110484.html)
 - [Dentrove](https://slashdot.org/software/p/Dentrove/)
 - [Kolonell: Dental clinic app Nairobi 2026](https://kolonell.com/en/blog/dental-clinic-management-app-appointments-reminders-nairobi-2026)
+- [Africa Check: Registered dentists in Nairobi](https://africacheck.org/infofinder/explore-facts/how-many-registered-dentists-are-there-nairobi)
+- [Oral Health Group: Kenya dentist shortage](https://www.oralhealthgroup.com/news/kenya-facing-acute-shortage-of-dentists-as-cases-of-oral-diseases-rise-1003969559/)
+- [Poidata: Dental clinics in Kenya](https://www.poidata.io/report/dental-clinic/kenya)
+- [Nairobi City County: Unified Business Permit](https://nairobi.go.ke/unified-business-permit-ubp-usage)
+- [Capital FM: Unified Business Permit guide](https://capitalfm.africa/all-you-need-to-know-about-the-unified-business-permit-costs-requirements-and-how-to-apply/)
+- [Kenyans.co.ke: Crackdown on unlicensed Nairobi clinics](https://www.kenyans.co.ke/news/93946-sakaja-orders-crackdown-unlicensed-clinics-nairobi)
+- [Business Daily: City Hall says 800 private clinics illegal](https://www.businessdailyafrica.com/bd/news/counties/city-hall-says-800-private-clinics-illegal-2228356)
+- [ITWeb: Safaricom and iXAfrica data centre](https://itweb.africa/article/safaricom-ixafrica-launch-east-africas-first-ai-ready-data-centre/wbrpO7g2XBLvDLZn)
+- [Baxtel: Nairobi data centre market](https://baxtel.com/data-center/nairobi)
+- [eNCA: Power cut hits large parts of Kenya, Feb 2026](https://www.enca.com/news-top-stories/power-cut-hits-large-parts-kenya)
+- [Nairobi News: Kenya Power blackouts in Nairobi estates](https://nairobinews.nation.africa/kenya-power-blackouts-in-nairobi-estates-and-kajiado-to-impact-businesses/)
+- [Kolonell: Clinic booking and no-shows Nairobi 2026](https://kolonell.com/en/blog/clinic-appointment-booking-no-show-app-nairobi-2026)
 - [Supabase: Available regions](https://supabase.com/docs/guides/platform/regions)
 - [Developing Telecoms: Oracle cloud in Kenya](https://developingtelecoms.com/telecom-technology/telecom-cloud-virtualization/16151-oracle-expands-african-cloud-presence-into-kenya.html)
