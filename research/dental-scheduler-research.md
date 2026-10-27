@@ -19,6 +19,22 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 
 ---
 
+## Design principle: international product, Kenyan rules
+
+The app should look and work like the international systems above (Dentrix, Curve, Open Dental). Only the parts that legally or practically must be local are Kenyan.
+
+| International standard (same as global dental software) | Kenyan / Nairobi local |
+|---|---|
+| UI and workflows: appointment book by chair and provider, drag and drop, colour coding, status flow, ASAP / no-show / unscheduled / recall lists, morning huddle | Data protection law (Data Protection Act 2019, ODPC) |
+| Full international patient record: demographics, emergency contact, responsible party, medical and dental history, consents, clinical chart | Digital Health Act 2023 and its 2025 regulations |
+| Clinical standards: **FDI / ISO 3950** two-digit tooth numbering (the international and WHO standard, with Universal as an option), standard perio chart (probing depth, bleeding, recession, mobility, furcation), ICD diagnosis codes | Data hosting in Nairobi |
+| Interoperability: HL7 FHIR based APIs, data export so the clinic is never locked in | Payments: M-Pesa, KES currency |
+| Security benchmarked to international best practice (HIPAA / GDPR / ISO 27001 style controls: encryption, role based access, audit trail, backups) | Payers: SHA, Kenyan insurers and corporate schemes, their procedure tariffs |
+| Accessibility (WCAG) and mobile first design | Licensing: KMPDC, Nursing Council, Nairobi County UBP, KNRA, ODPC |
+| Staff features: roles, credentials, rostering, leave, task assignment | National ID, +254 phone numbers, estate / landmark addresses, English and Kiswahili |
+
+---
+
 ## Nairobi specifics
 
 **Target market:** private dental clinics in Nairobi. Kenya has very few dentists (the Kenya Dental Association has cited about 793 registered nationally, around 1 per 70,000 people), so each dentist's chair time is valuable and a busy schedule is the norm. Nobody publishes an official count of Nairobi dental clinics. One commercial directory lists 589 dental clinics in Kenya, likely concentrated in Nairobi. We should build our own list (Google Maps, KDA directory) for sales.
@@ -69,8 +85,8 @@ At the dentist, reception keeps appointments, schedules and patient details in a
 ### Payer: cash, SHA, private insurance or employer scheme
 - Payer type: cash / M-Pesa, SHA, private insurer, corporate scheme
 - Private insurer (for example AAR, Jubilee, CIC, Britam, Madison) and scheme / employer name
-- Principal member name and relationship to patient
-- Member number, policy or scheme number
+- Principal member (subscriber) name, date of birth and relationship to patient
+- Member number, policy or scheme number, insurer phone
 - Dental cover limit and amount used (dental limits in Kenya are often around KES 10,000 to 20,000 a year)
 - Pre-authorisation needed? Pre-auth number and approval status
 - Secondary cover (for example SHA plus a private insurer)
@@ -203,7 +219,7 @@ Plus: `Cancelled`, `No-show / Broken`, `Rescheduled`, `Unscheduled` (needs a new
 
 ## 5. Privacy and security requirements
 
-Kenya's rules come from the **Data Protection Act 2019** and the **Data Protection (General) Regulations 2021**, enforced by the **ODPC** (Office of the Data Protection Commissioner).
+Kenya's rules come from the **Data Protection Act 2019** and the **Data Protection (General) Regulations 2021**, enforced by the **ODPC** (Office of the Data Protection Commissioner). Health software is also covered by the **Digital Health Act 2023** and its April 2025 regulations (Health Information Management Procedures, and Data Exchange Component), which include **certification of digital health systems** by the Digital Health Agency and rules for connecting to the national health data exchange. We need to confirm the certification criteria with the Agency before launch.
 
 - **Health data is sensitive personal data.** Processing it is treated as high risk, so a Data Protection Impact Assessment (DPIA) is expected.
 - **ODPC registration.** The clinic (data controller) must register with the ODPC; the certificate lasts 2 years. If we host the data for clinics, we are a **data processor** and must register too.
@@ -263,7 +279,7 @@ The app must have:
 - [ ] Bilingual interface and messages (English / Kiswahili)
 
 ### Phase 3: Full practice management
-- [ ] Tooth chart and perio chart
+- [ ] Tooth chart (FDI numbering by default, Universal / Palmer optional) and perio chart
 - [ ] Clinical notes with templates
 - [ ] X-ray and photo upload
 - [ ] Treatment plans with cost estimates
@@ -273,6 +289,8 @@ The app must have:
 - [ ] Multi-branch support
 - [ ] Clock-in / clock-out
 - [ ] Data import from other systems and export (so the clinic is never locked in)
+- [ ] HL7 FHIR API for exchange with labs, hospitals, insurers and the national health data exchange
+- [ ] Digital Health Agency system certification
 
 ### Suggested technology
 - **Frontend:** a single web app (React / Next.js) that installs on phones as a PWA, so one codebase covers reception PC, tablets and phones
@@ -357,5 +375,11 @@ The app must have:
 - [eNCA: Power cut hits large parts of Kenya, Feb 2026](https://www.enca.com/news-top-stories/power-cut-hits-large-parts-kenya)
 - [Nairobi News: Kenya Power blackouts in Nairobi estates](https://nairobinews.nation.africa/kenya-power-blackouts-in-nairobi-estates-and-kajiado-to-impact-businesses/)
 - [Kolonell: Clinic booking and no-shows Nairobi 2026](https://kolonell.com/en/blog/clinic-appointment-booking-no-show-app-nairobi-2026)
+- [Parliament of Kenya: Digital Health (Health Information Management Procedures) Regulations 2025](https://libraryir.parliament.go.ke/bitstreams/6aa4f05c-662b-4ea2-96fc-a8d2ae40f4df/download)
+- [WHX Insights: Digital health in Kenya](https://www.worldhealthexpo.com/insights/healthcare-management/digital-health-in-kenya)
+- [Clyde & Co: Health data protection in Kenya](https://www.clydeco.com/en/insights/2026/03/health-data-protection-in-kenya-strategic-complian)
+- [FHIR packages: Kenya](https://packages.fhir.org/jurisdictions/KE)
+- [Wikipedia: Dental notation (FDI / ISO 3950 vs Universal)](https://en.wikipedia.org/wiki/Dental_notation)
+- [Planet DDS: Tooth numbering systems](https://support.planetdds.com/hc/en-us/articles/115002091432-What-are-the-differences-in-Tooth-Numbering-Systems)
 - [Supabase: Available regions](https://supabase.com/docs/guides/platform/regions)
 - [Developing Telecoms: Oracle cloud in Kenya](https://developingtelecoms.com/telecom-technology/telecom-cloud-virtualization/16151-oracle-expands-african-cloud-presence-into-kenya.html)
